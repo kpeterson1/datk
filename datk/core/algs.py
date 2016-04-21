@@ -193,7 +193,7 @@ class SynchHS(Synchronous_Algorithm):
             # create temp vars to keep track of send+ and send- messages sent by process p in round i
             minus_msg = [x for x in msgs if p.out_nbrs.index(x.author) == 0][-1]
             plus_msg = [x for x in msgs if p.out_nbrs.index(x.author) == 1][-1]
-            print minus_msg, plus_msg
+            
 
             u = p.UID
             v_plus = plus_msg.content[0]
@@ -260,7 +260,7 @@ class SynchHS(Synchronous_Algorithm):
             # add messages to be sent
             self.set(p, "send_plus", send_plus)
             self.set(p, "send_minus", send_minus)
-            print self.get(p, "phase")
+            
 
             # set the nodes to be non-leaders if they were not already elected
             if not self.has(p, "decided"):
@@ -270,7 +270,7 @@ class SynchHS(Synchronous_Algorithm):
         # terminate algorithm if total number of phases so far = 1+ ceil(log(n))
         # total number of phases so far = (current phase + 1) to include phase 0
         max_num_phases = 1 + math.ceil(math.log(2, p.state['n']))
-        total_phases = self.get(p, "phase")
+        total_phases = self.get(p, "phase")+1
 
         if total_phases == max_num_phases:
             p.terminate(self)
