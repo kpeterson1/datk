@@ -1,4 +1,56 @@
 from distalgs import *
+
+def Colorizer(algorithm,network,vals,algorithm_type):
+    """
+    algorithm_type can have following values thus far:
+    leader_election
+    BFS
+    """
+    if algorithm_type == "leader_election":
+        #TODO: do visualization for undecided nodes
+        node_colors = dict()
+        edge_colors = None
+        for p in network.processes:
+            # if self.has(p, "decided"):
+            if p.state['status'] == "leader":
+                node_colors[p.UID] = 'ro'
+
+            elif p.state['status'] == "non-leader": # non-leader
+                node_colors[p.UID] = 'bo'
+
+        # algoDrawArgs = AlgorithmDrawArgs(node_colors = node_colors, edge_colors = edge_colors)
+        return node_colors, edge_colors
+
+    elif algorithm_type == "BFS":
+        node_colors = None
+        edge_colors = dict()
+        for p in network.processes:
+            if p.state['parent']:
+                parent_UID = p.state['parent'].UID
+                edge_colors[(p.UID,parent_UID)] = 'r'
+
+        return node_colors, edge_colors
+
+
+# class LeaderElectionAlgorithm(Synchronous_Algorithm):
+#     def get_draw_args(self,network,vals):
+#         """network - refers to the network on which the algorithm is running.
+#         vals - the positions of the nodes in the network"""
+#         node_colors = dict()
+#         edge_colors = None
+#         for p in network.processes:
+#             # if self.has(p, "decided"):
+#             if p.state['status'] == "leader":
+#                 node_colors[p.UID] = 'ro'
+
+#             elif p.state['status'] == "non-leader": # non-leader
+#                 node_colors[p.UID] = 'bo'
+
+#         # algoDrawArgs = AlgorithmDrawArgs(node_colors = node_colors, edge_colors = edge_colors)
+#         return node_colors, edge_colors
+
+
+
 #Leader Election Algorithms for Ring networks:
 
 class LCR(Synchronous_Algorithm):
@@ -41,6 +93,11 @@ class LCR(Synchronous_Algorithm):
             else:
                 self.set(p, "send",  None)
         if self.r == p.state['n']: p.terminate(self)
+
+    def get_draw_args(self,network,vals):
+        algorithm_type = "leader_election"
+        return Colorizer(self,network,vals,algorithm_type)
+
 
 class AsyncLCR(Asynchronous_Algorithm):
     """The LeLann, Chang and Roberts algorithm for Leader Election in an Asynchronous Ring Network 
@@ -100,8 +157,13 @@ class AsyncLCR(Asynchronous_Algorithm):
                     self.set(p, 'decided', None)
                     self.output(p,"status", "non-leader")
 
+    def get_draw_args(self,network,vals):
+        algorithm_type = "leader_election"
+        return Colorizer(self,network,vals,algorithm_type)
+
 
 #Leader Election Algorithms for general Networks:
+
 class SynchFloodMax(Synchronous_Algorithm):
     """
     UID flooding algorithm for Leader Election in a general network
@@ -135,6 +197,9 @@ class SynchFloodMax(Synchronous_Algorithm):
                 self.output(p,"status", "non-leader")
                 p.terminate(self)
 
+    def get_draw_args(self,network,vals):
+        algorithm_type = "leader_election"
+        return Colorizer(self,network,vals,algorithm_type)
 
 class SynchHS(Synchronous_Algorithm):
     """The Hirschberg and Sinclair ("HS") algorithm for Leader Election in a Synchronous Bidirectional Ring Network
@@ -151,154 +216,127 @@ class SynchHS(Synchronous_Algorithm):
     If the identifier is less than its own, it discards the incoming identifier;
     if it is equal to its own, the Process declares itself the leader.
 
+    Effects:
+        - Every process has state['status'] is 'leader' or 'non-leader'.
+        - Exactly one process has state['status'] is 'leader'
+    """
+    class Leader_Declaration(Message): pass
+
+    def msgs_i(self, p):
+        if "status" in p.state:
+            p.send_msg(SynchHS.Leader_Declaration(self), p.out_nbrs[-1])
+            return p.terminate(self)
+
+        # initialize messages if needed
+        plus_msg = (p.UID, "out", 1)
+        minus_msg = (p.UID, "out", 1)
+        if not self.has(p, "send+"):
+            self.set(p, 'send+', Message(self, plus_msg))
+
+        if not self.has(p, "send-"):
+            self.set(p, 'send-', Message(self, minus_msg))
+
+       # send the current value of send+ to process i + 1
+        msg = self.get(p, "send+")
+        if msg is not None:
+            self.set(p, "send+", None)
+            p.send_msg(msg, p.out_nbrs[-1])
+
+        # send the current value of send- to process i- 1
+        msg = self.get(p, "send-")
+        if msg is not None:
+            self.set(p, "send-", None)
+            p.send_msg(msg, p.out_nbrs[0])
+
+    def trans_i(self, p, msgs):
+        # initialize the phase of process p to phase 0
+        if not self.has(p, "phase"):
+            self.set(p, "phase", 0)
+
+        left_msg_returned = False
+        right_msg_returned = False
+        for msg in msgs:
+            if isinstance(msg, SynchHS.Leader_Declaration):
+                self.output(p, "status", "non-leader") #Terminates next msgs_i
+                return
+            val, flag, hopcount = msg.content
+
+            # If msg came from process i-1
+            if msg.author == p.out_nbrs[0]:
+                if flag == 'out':
+                    if val > p.UID and hopcount > 1:
+                        self.set(p, 'send+', Message(self, (val, flag, hopcount-1)))
+                    if val > p.UID and hopcount == 1:
+                        self.set(p, 'send-', Message(self, (val, 'in', 1)))
+                    if val == p.UID:
+                        return self.output(p, "status", "leader") #Terminates next msgs_i
+                if flag == 'in':
+                    if val != p.UID:
+                        self.set(p, 'send+', msg)
+                    else:
+                        left_msg_returned = True
+
+            #If msg came from process i+1
+            if msg.author == p.out_nbrs[1]:
+                if flag == 'out':
+                    if val > p.UID and hopcount > 1:
+                        self.set(p, 'send-', Message(self, (val, flag, hopcount-1)))
+                    if val > p.UID and hopcount == 1:
+                        self.set(p, 'send+', Message(self, (val, 'in', 1)))
+                    if val == p.UID:
+                        return self.output(p, "status", "leader") #Terminates next msgs_i
+                if flag == 'in':
+                    if val != p.UID:
+                        self.set(p, 'send-', msg)
+                    else:
+                        right_msg_returned = True
+
+        if left_msg_returned and right_msg_returned:
+            #Start next phase
+            next_phase = self.get(p, 'phase') + 1
+            self.set(p, 'phase', next_phase)
+            self.set(p, 'send+', Message(self, (p.UID, "out", 2**next_phase)))
+            self.set(p, 'send-', Message(self, (p.UID, "out", 2**next_phase)))
+
+    def get_draw_args(self,network,vals):
+        algorithm_type = "leader_election"
+        return Colorizer(self,network,vals,algorithm_type)
+
+class SynchTimeSlice(Synchronous_Algorithm):
+    """The TimeSlice algorithm in a Synchronous Ring Network
+
+    Computation proceeds in phases 1, 2, ..., where each phase consists
+    of n consecutive rounds. Each phase is devoted to the possible
+    circulation, all the way around the ring, of a token carrying a
+    particular UID. More specifically, in phase v, which consists of
+    rounds (v - 1)n + 1,... , vn, only a token carrying UID v is permitted
+    to circulate. If a process i with UID v exists, and round (v - 1)n + 1
+    is reached without i having previously received any non-null messages,
+    then process i elects itself the leader and sends a token carrying its
+    UID around the ring. As this token travels, all the other processes note
+    that they have received it, which prevents them from electing themselves
+    as leader or initiating the sending of a token at any later phase.
+
     Requires:
         - Every process knows state['n'], the size of the network
+
     Effects:
         - Every process has state['status'] is 'leader' or 'non-leader'.
         - Exactly one process has state['status'] is 'leader'
     """
     def msgs_i(self, p):
-        # initialize messages if needed
+        msg = self.get(p, "send")
+        if msg:
+            if (self.r - 1)/p.state['n'] == msg.content-1:
+                p.send_msg(msg)
 
-        plus_msg = tuple(p.UID, "out", 1)
-        minus_msg = tuple(p.UID, "out", 1)
-        if not self.has(p, "send_plus"):
-            self.set(p, 'send_plus', Message(self, plus_msg))
-
-        if not self.has(p, "send_minus"):
-            self.set(p, 'send_minus', Message(self, minus_msg))
-
-       # send the current value of send+ to process i + 1
-        msg = self.get(p, "send_plus")
-        if msg is None:
-            return
-        self.set(p, "send_plus", None)
-        p.send_msg(msg, p.out_nbrs[-1])
-
-        # send the current value of send- to process i- 1
-        msg = self.get(p, "send_minus")
-        if msg is None:
-            return
-        self.set(p, "send_minus", None)
-        p.send_msg(msg, p.out_nbrs[0])
-
-
-    def get_phase(self, p):
-        return self.get(p, "phase")
-
-    def trans_i(self, p, msgs):
-
-        # send+ := null
-        # send- := null
-        send_plus = None
-        send_minus = None
-
-        u = p.UID
-
-        # initialize the phase of process p to phase 0
-        if not self.has(p, "phase"):
-            self.set(p, "phase", 0)
-
-        # if there are no messages to send, initialize send+ and send-
-        # to contain the triple consisting of i's UID, out, and 1
-        if len(msgs) == 0 and get_phase(p) == 0:
-            send_plus = Message(self, tuple(u, "out", 1))
-            send_minus = Message(self, tuple(u, "out", 1))
-
-        else:
-            # create temp vars to keep track of send+ and send- messages sent by process p in round i
-            minus_msg = [x for x in msgs if p.out_nbrs.index(x.author) == 0][-1]
-            plus_msg = [x for x in msgs if p.out_nbrs.index(x.author) == 1][-1]
-
-
-            v_plus = plus_msg.content[0]
-            h_plus = plus_msg.content[2]
-            v_minus = minus_msg.content[0]
-            h_minus = minus_msg.content[2]
-
-            # message from i-1 is (v, out, h)
-            if minus_msg.content[1] == "out" :
-                # if send+ := (v, out, h- 1)
-                if v_minus > u and h_minus > 1:
-                    send_plus = Message(self, tuple(v_minus, "out", h - 1))
-                # case v > u and h = 1:
-                # send- :- (v, in, 1)
-                elif v_minus > u and h_minus == 1:
-                    send_minus = Message(self, tuple(v_minus, "in", 1))
-
-                # case v = u: status
-                # status:= leader
-                elif v_minus == u:
-                    self.output(p, "status", "leader")
-
-            # message from i+1 is (v, out, h)
-            if plus_msg.content[1] == "out" :
-                # case: v > u and h > I:
-                # send- :- (v, out, h- I)
-                if v_plus > u and h_plus > 1:
-                    send_minus= Message(self, tuple(v_plus, "out", h_plus - 1))
-
-                # case: v > u and h -- 1:
-                # send+ := (v, in, 1)
-                elif v_plus> u and h_plus == 1:
-                    send_plus = Message(self, tuple(v_plus, "in", 1))
-
-                # case: v = u: status :-- leader
-                # status :-- leader
-                elif v_plus == u:
-                    self.output(p, "status", "leader")
-
-
-             # if the message from i - 1 is (v, in, 1) and v != u
-            if minus_msg.content[1] == "in" and v_minus != u:
-                # then send+ := (v, in, 1)
-                send_plus = Message(self, tuple(v_minus, "in", 1))
-
-            # if the messages from i - 1 and i + 1 are both (u, in, 1)
-            if plus_msg.content[1] == "in" and v_plus != u:
-                # then send- := (v, in, 1)
-                send_minus = Message(self, tuple(v_plus, "in", 1))
-
-            # if the messages from i - 1 and i + 1 are both (u, in, 1)
-            if plus_msg.content == (u, "in", 1) and minus_msg.content == (u, "in", 1):
-                # phase := phase + 1
-                if self.has(p, "phase"):
-                    self.set(p, "phase", get_phase(p)+1)
-                # if does p not have phase attribute, set it to 0
-                else:
-                    self.set(p, "phase", 0)
-                # create msg => send+ := (u, out, 2**phase)
-                # create msg => send- := (u, out, 2**phase)
-                send_plus = Message(self, tuple(u, "out", math.pow(2, get_phase(p))))
-                send_minus = Message(self, tuple(u, "out", math.pow(2, get_phase(p))))
-
-            # add messages to be sent
-            self.set(p, "send_plus", send_plus)
-            self.set(p, "send_minus", send_minus)
-
-            # set the nodes to be non-leaders if they were not already elected
-            if not self.has(p, "decided"):
-                self.set(p, "decided", None)
-                self.output(p,"status", "non-leader")
-
-        # terminate algorithm if total number of phases so far = 1+ ceil(log(n))
-        # total number of phases so far = (current phase + 1) to include phase 0
-        max_num_phases = 1 + math.ceil(math.log(2, p.state['n']))
-
-        total_phases = get_phase(p)
-
-        if total_phases == max_num_phases:
             p.terminate(self)
 
-#TODO: Synchronous TimeSlice
-class SynchTimeSlice(Synchronous_Algorithm):
-    """The TimeSlice algorithm in a Synchronous Ring Network """
-    def msgs_i(self, p):
-        if self.r == (p.UID-1)*p.state['n']+1 and not self.has(p, "decided"): # check if logic is correct for this
+        elif self.r == (p.UID-1)*p.state['n']+1 and not self.has(p, "decided"): # check if logic is correct for this
             self.set(p, 'decided', None)
             self.output(p,"status", "leader")
             msg = Message(self, p.UID)
-            p.send_msg( msg) 
+            p.send_msg( msg)
             p.terminate(self)
 
 
@@ -308,13 +346,79 @@ class SynchTimeSlice(Synchronous_Algorithm):
             if (self.r - 1)/p.state['n'] == msg.content-1 and not self.has(p,"decided"):
                 self.set(p, 'decided', None)
                 self.output(p,"status", "non-leader")
-                p.send_msg(msg)
+                self.set(p,"send", msg)
+
+            else:
+                self.set(p,"send",None)
                 p.terminate(self)
 
+    def get_draw_args(self,network,vals):
+        algorithm_type = "leader_election"
+        return Colorizer(self,network,vals,algorithm_type)
+
 class SynchVariableSpeeds(Synchronous_Algorithm):
-    pass
+    """
+    The VariableSpeeds algorithm for Leader Election in a Synchronous Ring Network
+
+    Each process i initiates a token which travels around the ring.
+    - Different tokens tavel at different rates: a token carraying UID v travels at
+    the rate of 1 message transmission every 2^v rounds.
+    For example, for the token with UID 1, each process along its path waits
+    2 rounds after receiving the token before sending it out.
+    - Each process keeps track of the smallest UID it has seen and discard any token
+    with the UID larger than the smallest UID
+    - If a token returns to its originator, the originator is elected.
+
+    Effects:
+        - Every process has state['status'] is 'leader' or 'non-leader'.
+        - Exactly one process has state['status'] is 'leader'
+    """
+    class Leader_Declaration(Message): pass
+
+    def msgs_i(self, p):
+        if 'status' in p.state:
+            p.send_msg(SynchVariableSpeeds.Leader_Declaration(self), p.out_nbrs[-1])
+            return p.terminate(self)
+
+        if not self.has(p, "queue"):
+            token =  Message(self, {"UID": p.UID, "TTS": 2**p.UID})
+            self.set(p, "queue", [token])
+            self.set(p, "smallest_uid", p.UID)
+
+        queue = self.get(p, "queue")
+
+        for i in reversed(range(len(queue))):
+            msg = queue[i]
+            msg.content["TTS"] -= 1
+            if msg.content["TTS"] <= 0:
+                if msg.content['UID'] == self.get(p, "smallest_uid"):
+                    p.send_msg(msg, p.out_nbrs[-1])
+                queue.pop(i)
+
+        self.set(p, "queue", queue)
+
+    def trans_i(self, p, msgs):
+        queue = self.get(p, "queue")
+
+        for msg in msgs:
+            if isinstance(msg, SynchVariableSpeeds.Leader_Declaration):
+                return self.output(p, 'status', 'non-leader') #Terminates next msgs_i
+            if msg.content["UID"] == p.UID:
+                return self.output(p, 'status', 'leader') #Terminates next msgs_i
+            if msg.content["UID"] < self.get(p, "smallest_uid"):
+                self.set(p, "smallest_uid", msg.content["UID"])
+
+            msg.content["TTS"] = 2**msg.content["UID"]
+            queue.append(msg)
+
+        self.set(p, "queue", queue)
+
+    def get_draw_args(self,network,vals):
+        algorithm_type = "leader_election"
+        return Colorizer(self,network,vals,algorithm_type)
 
 #Construct BFS Tree
+
 class SynchBFS(Synchronous_Algorithm):
     """Constructs a BFS tree with the 'leader' Process at its root
 
@@ -327,14 +431,14 @@ class SynchBFS(Synchronous_Algorithm):
     outgoing neighbors.
 
     Requires:
-        - testLeaderElection
+        - assertLeaderElection
     Effects:
         - every Process has state['parent']. Leader has state['parent'] = None
     """
     class Search(Message):
         """Search for children"""
         pass
-    
+
     def is_i0(self, p): return p.state["status"] == "leader"
 
     def msgs_i(self, p):
@@ -354,6 +458,13 @@ class SynchBFS(Synchronous_Algorithm):
             if self.has(p, "recently_marked"): self.delete(p, "recently_marked")
             p.terminate(self)
 
+    def get_draw_args(self,network,vals):
+        """network - refers to the network on which the algorithm is running.
+        vals - the positions of the nodes in the network"""
+        algorithm_type = "BFS"
+        return Colorizer(self,network,vals,algorithm_type)
+
+
 class SynchBFSAck(Synchronous_Algorithm):
     """Constructs a BFS tree with children pointers and the 'leader' Process at its root
 
@@ -368,8 +479,8 @@ class SynchBFSAck(Synchronous_Algorithm):
     will also know their children.
 
     Requires:
-        - testLeaderElection
-    Effects: 
+        - assertLeaderElection
+    Effects:
         - Every process knows:
             - state['parent']. Leader has state['parent'] = None
             - state['childen']. Leaves have state['children'] = []
@@ -412,6 +523,13 @@ class SynchBFSAck(Synchronous_Algorithm):
                 if self.params["verbosity"]>=Algorithm.VERBOSE:
                     print p,"knows children"
 
+    def get_draw_args(self,network,vals):
+        """network - refers to the network on which the algorithm is running.
+        vals - the positions of the nodes in the network"""
+        algorithm_type = "BFS"
+        return Colorizer(self,network,vals,algorithm_type)
+
+
 #Convergecast
 
 class SynchConvergecast(Synchronous_Algorithm):
@@ -420,6 +538,9 @@ class SynchConvergecast(Synchronous_Algorithm):
 
     Requires:
         - Every Process knows state['parent']
+    Effects:
+        - The root node knows the result of some global computation on the
+        network (subclasses of SynchConvergecast define this computation).
     """
     #TODO If Processes also know state['children'] ==> Reduced Communication Complexity.
     def is_root(self, p): return p.state['parent'] is None
@@ -434,7 +555,7 @@ class SynchConvergecast(Synchronous_Algorithm):
         msgs = [m.content for m in msgs]
         if self.is_root(p):
             if len (msgs) > 0:
-                self.trans_root(p, msgs) 
+                self.trans_root(p, msgs)
             else:
                 self.output_root(p)
                 p.terminate(self)
@@ -443,17 +564,48 @@ class SynchConvergecast(Synchronous_Algorithm):
                 self.set(p, 'send', self.trans_msg_to_parent(p, msgs) )
             else:
                 p.terminate(self)
-    def trans_root(self, p, msgs):          pass
-    def output_root(self, p):               pass
-    def initial_msg_to_parent(self, p):     return
-    def trans_msg_to_parent(self, p, msgs): return
+    def trans_root(self, p, msgs):
+        """Determines the state transition the root node should undergo
+        when it receives messages
+
+        @param p: the root Process
+        @param msgs: the messages received by the root Process, from its BFS children
+        """
+        pass
+    def output_root(self, p):
+        """Determines the output action, if any, that the root should perform
+        at the end of the Convergecast.
+        """
+        pass
+    def initial_msg_to_parent(self, p):
+        """Defines the initial message sent from a leaf process to its parent at the
+        beginning of the Convergecast
+
+        @param p: A Process at a leaf of the BFS tree
+        @return: the Message p should send to its state['parent']
+        """
+        return
+    def trans_msg_to_parent(self, p, msgs):
+        """Defines the message a non-leaf, non-root Process should send to its parent
+        when it has received all its children's messages
+
+        @param p: a Process that has both p.state['parent'] != null, and p.state['children'] not empty
+        @param msgs: A list of messages from every child of p (in p.state['children']) 
+        @return: the Message p should send to its state['parent']
+        """
+        return
+
 
 class AsynchConvergecast(Asynchronous_Algorithm):
     """The abstract superclass of a class of Asynchronous Algorithms that
     propagate information from the leaves of a BFS tree to its root.
 
     Requires:
-        - Every Process knows state['parent'] and state['children']"""
+        - Every Process knows state['parent'] and state['children']
+    Effects:
+        - The root node knows the result of some global computation on the
+        network (subclasses of SynchConvergecast define this computation).
+    """
     def is_root(self, p): return p.state['parent'] is None
     def msgs_i(self, p):
         if not self.has(p, 'reports'):
@@ -510,6 +662,7 @@ class AsynchConvergecast(Asynchronous_Algorithm):
         """
         return
 
+
 def _converge_height(Convergecast, name):
     class _ConvergeHeight(Convergecast):
         """
@@ -524,7 +677,7 @@ def _converge_height(Convergecast, name):
         def trans_root(self, p, msgs):      #Updates height
             self.set(p, 'height', max(msgs))
         def output_root(self, p):           #Decides height
-            self.output(p,'height', self.get(p, 'height')) 
+            self.output(p,'height', self.get(p, 'height'))
         def initial_msg_to_parent(self, p):
             return Message(self, 1)
         def trans_msg_to_parent(self, p, msgs):
@@ -535,7 +688,9 @@ def _converge_height(Convergecast, name):
 SynchConvergeHeight = _converge_height(SynchConvergecast, "SynchConvergeHeight")
 AsynchConvergeHeight = _converge_height(AsynchConvergecast, "AsynchConvergeHeight")
 
+
 #Broadcast
+
 class SynchBroadcast(Synchronous_Algorithm):
     """Broadcasts a value stored in Process, p, to the BFS tree rooted at p
 
@@ -553,7 +708,7 @@ class SynchBroadcast(Synchronous_Algorithm):
         attr = self.params['attr']
         if p.state['parent'] is None:
             if self.r == 1:
-                p.send_msg(Message(self, p.state[attr]), p.state['children']) 
+                p.send_msg(Message(self, p.state[attr]), p.state['children'])
         if p.state['parent'] is not None:
             if self.get(p, 'send') is not None:
                 p.send_msg(Message(self,self.get(p, 'send')), p.state['children'])
@@ -572,12 +727,14 @@ class SynchBroadcast(Synchronous_Algorithm):
                 else:
                     p.terminate(self)
 
+
 #Maximal Independent Set
+
 class SynchLubyMIS(Synchronous_Algorithm):
     """A randomized algorithm that constructs a Maximal Independent Set
-    
+
     The algorithm works in stages, each consisting of three rounds.
-    
+
         - Round 1: In the first round of a stage, the processes choose their
         respective vals and send them to their neighbors. By the end of round
         1, when all the val messages have been received, the winners--that is,
@@ -603,7 +760,7 @@ class SynchLubyMIS(Synchronous_Algorithm):
             self.set(p, 'rem_nbrs', p.out_nbrs[:])
             self.set(p, 'status', 'unknown')
 
-        if self.r%3 == 1: 
+        if self.r%3 == 1:
             self.set(p, 'val', random.randint(0,p.state['n'] **4 ))
             p.send_msg( Message(self, self.get(p, 'val')), self.get(p, 'rem_nbrs') )
         if self.r%3 == 2:
@@ -611,7 +768,7 @@ class SynchLubyMIS(Synchronous_Algorithm):
                 p.send_msg( Message(self, 'winner') , self.get(p, 'rem_nbrs') )
         if self.r%3 == 0:
              if self.get(p, 'status') == 'loser':
-                p.send_msg( Message(self, 'loser') , self.get(p, 'rem_nbrs') )           
+                p.send_msg( Message(self, 'loser') , self.get(p, 'rem_nbrs') )
     def trans_i(self, p, msgs):
         values = [m.content for m in msgs]
         if self.r%3 ==1:
@@ -630,3 +787,48 @@ class SynchLubyMIS(Synchronous_Algorithm):
             self.set(p, 'rem_nbrs', rem_nbrs)
             if self.get(p, 'status') in ['winner', 'loser']:
                 p.terminate(self)
+
+
+#All pairs shortest paths
+#TODO : Doesn't seem to work for networks with negative weight edges.
+class SynchBellmanFord(Synchronous_Algorithm):
+    """
+    All pairs shortest paths algorithm for a synchronous Network.
+
+    Requires:
+        - Every process knows state['nbr_dist'][UID], the weight of the edge
+        form the process to the neighboring process with uid UID, for all
+        neighbors.
+    Effect:
+        - Every process knows state['SP'][UID], the weight of the
+        shortest path to the process with uid UID, for every other process
+        in the network.
+    """
+    def msgs_i(self, p):
+        if self.r == 1:
+            self.set(p, 'SP', p.state['nbr_dist'])
+            self.set(p, 'send', True)
+
+        if self.get(p, 'send') == True:
+            p.send_msg(Message(self, self.get(p, 'SP')))
+
+        if self.r == p.state['n']:
+            p.output('SP', self.get(p, 'SP'))
+            p.terminate(self)
+
+    def trans_i(self, p, msgs):
+        self.set(p, 'send', False)
+
+        SP = self.get(p, 'SP')
+        updated_SP = deepcopy(SP)
+        for msg in msgs:
+            u = msg.author.UID
+            for v, weight in msg.content.items():
+                if v == p.UID:
+                    continue
+                if v not in SP or SP[u] + weight < SP[v]:
+                    updated_SP[v] = SP[u] + weight
+
+        if updated_SP != SP:
+            self.set(p, 'SP', updated_SP)
+            self.set(p, 'send', True)
