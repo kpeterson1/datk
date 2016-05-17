@@ -854,18 +854,20 @@ class FloodSet(Synchronous_Algorithm):
           the algorithm has successfully terminated, then p.state["decision"] = "failed."
         - Every process, p, maintains a variable, W, containing a subset of the input set, V.
 
-    The Synchronous_Algorithm class is initialized to contain self.params, which is a dictionary containing the following key-value pairs:
-    | *** Key    :   Value ***
-    |______________________________________________________________________________________________________________________________________________
+    The Synchronous_Algorithm class is initialized to contain self.params, which is a dictionary containing the following key-value pairs used by 
+    the FloodSet algorithm and its related variations:
+    _______________________________________________________________________________________________________________________________________________
+    | *** Key    :   Value ***                                                                                                                    |
+    |_____________________________________________________________________________________________________________________________________________|
     |* f         :   positive, non-zero integer value indicating total number of faults allowed by algorithm (i.e. its fault tolerance)           |
-    |* dec_rule  :   function by which processes decide upon a value, v, given a set, W, of values received as msgs                               |
+    |* dec_rule  :   function by which processes decide upon a value, v, given a set, W, of values received as msgs. Only used in OptFloodSet.    |
     |* v_0       :   a prespecified default decision value in the input set V.                                                                    |
-    |* V         :   initial set of possible decision values;                                                                                     |
+    |* V         :   initial input set of possible decision values;                                                                               |
     |* fail_prob :   sets the probability a process p fails in any given round                                                                    |
     |* max_f     :   boolean - determines whether or not more than the allowed number of failures have occurred since the beginning of            |
     |                execution of the algorithm. If True, then the number of failures that have occurred so far is <= f, the allowed number of    |
     |                failures. If False, then the number of failures that have occurred so far is < f. (The default value of max_f is False).     |
-    |* is_ring   :   boolean indicating if the network on which FloodSet will run is ring-shaped (e.g. Uni-Ring or Bi-Ring)
+    |* is_ring   :   boolean indicating if the network on which FloodSet will run is ring-shaped (e.g. Uni-Ring or Bi-Ring)                       |
     |_____________________________________________________________________________________________________________________________________________|
     """
 
@@ -924,30 +926,24 @@ class FloodSet(Synchronous_Algorithm):
         random_prob: a randomly generating floating-point number between 0.0 and 1.0; determined within the method below.
         failure_probability: a double whose value is between 0.0 and 1.0. Given a randomly generated value, random_prob, the value of
         'failure_probability' determines the upperbound of allowed values of random_prob for which a process is in the state 'not Failed.'
-        If 'failure' probability is 0, then the process p will be determined to be in the state 'Not Failed.'
-        If 'failure' probability is 1, then the process p will always be determined to be in the state 'Failed.'
+        If 'failure_probability' is 0, then the process p will be determined to be in the state 'Not Failed.'
+        If 'failure_probability' is 1, then the process p will always be determined to be in the state 'Failed.'
 
         Checks whether or not a process, p, has failed at a given point in time. The state of a process ('Failed' or 'Not Failed')
         is determined probabilistically by generating a random floating point number (i.e. random.random()). If this
         number is less than failure_probability, the process has not failed.
         """
         failure = False
-        # likelihood that a given process p will fail during current round
-        random_prob  = random.random()
+        random_prob  = random.random() # likelihood that a given process p will fail during current round
 
         if random_prob < failure_probability:
-            # process has not failed.
-            # occurs indefinitely when failure_probability is set to 1.
+            # process has not failed. occurs indefinitely when failure_probability is set to 1.
             return not (failure)
         else:
             if random_prob == 1.0 and failure_probability == 1.0:
-                # handles the case when both values are set to 1.0, and we do not want to detrmined that
-                # the process is in the failed state.
                 return not (failure)
             else:
                 # process has failed, return; don't continue with trans_i step
-                # if failure_proabability is 0, then (random_prob < failure_probability) is False,
-                # so the boolean 'failure,'  whose default is False, is returned
                 return failure
 
 

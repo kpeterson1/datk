@@ -327,20 +327,20 @@ def SYNCH_LUBY_MIS():
     assertLubyMIS(x)
 
 @test
-def SYNCH_FLOODSET_RANDOM_GRAPH_SOME_FAIL(test=True):
+def SYNCH_FLOODSET_RANDOM_GRAPH_SOME_FAIL():
     x = Random_Line_Network(10)
     A = FloodSet(x, params ={"f": 4, "v_0": 0, "V": set([1,2,3,4,5,6]), "fail_prob": 0.5, "failed_p": set(), "max_f": False, "is_ring": False})
     assertSomeFail(x, A)
 
 @test
-def SYNCH_FLOODSET_RANDOM_GRAPH_ALL_FAIL(test=True):
+def SYNCH_FLOODSET_RANDOM_GRAPH_ALL_FAIL():
     x = Random_Line_Network(10)
-    B = FloodSet(x, params ={"f": 4, "v_0": 0, "V": set([1,2,3,4,5,6]), "fail_prob": 1, "failed_p": set(), "max_f": False})
+    B = FloodSet(x, params ={"f": 4, "v_0": 0, "V": set([1,2,3,4,5,6]), "fail_prob": 1, "failed_p": set(), "max_f": False, "is_ring": True})
     assertAllFailed(x)
     assertNoConsensus(x)
 
 @test
-def SYNCH_FLOODSET_RANDOM_GRAPH_NO_FAIL(test=True):
+def SYNCH_FLOODSET_RANDOM_GRAPH_NO_FAIL():
     x = Random_Line_Network(10)
     C = FloodSet(x, params ={"f": 4, "v_0": 0, "V": set([0]), "fail_prob": 0, "failed_p": set(), "max_f": False, "is_ring": False})
     assertAllAlive(x)
@@ -348,7 +348,7 @@ def SYNCH_FLOODSET_RANDOM_GRAPH_NO_FAIL(test=True):
     assertConsensusWithValueInInitialSet(x, C)
 
 @test
-def SYNCH_FLOODSET_RANDOM_GRAPH_AGREE_ON_INITIAL_VALUE(test=True):
+def SYNCH_FLOODSET_RANDOM_GRAPH_AGREE_ON_INITIAL_VALUE():
     x = Random_Line_Network(10)
     C = FloodSet(x, params ={"f": 4, "v_0": 0, "V": set([0, 0, 0, 0, 0]), "fail_prob": 0, "failed_p": set(), "max_f": False, "is_ring": False})
     assertAllAlive(x)
@@ -356,20 +356,20 @@ def SYNCH_FLOODSET_RANDOM_GRAPH_AGREE_ON_INITIAL_VALUE(test=True):
     assertConsensusOnInitialValue(x, C)
 
 @test
-def SYNCH_FLOODSET_COMPLETE_GRAPH_SOME_FAIL(test=True):
+def SYNCH_FLOODSET_COMPLETE_GRAPH_SOME_FAIL():
     g = Complete_Graph(10)
     A = FloodSet(g, params ={"f": 4, "v_0": 0, "V": set([1,2,3,4,5,6]), "fail_prob": 0.5, "failed_p": set(), "max_f": False, "is_ring": False})
     assertSomeFail(g, A)
 
 @test
-def SYNCH_FLOODSET_COMPLETE_GRAPH_ALL_FAIL(test=True):
+def SYNCH_FLOODSET_COMPLETE_GRAPH_ALL_FAIL():
     g = Complete_Graph(10)
     B = FloodSet(g, params ={"f": 4, "v_0": 0, "V": set([1,2,3,4,5,6]), "fail_prob": 1, "failed_p": set(), "max_f": False, "is_ring": False})
     assertAllFailed(g)
     assertNoConsensus(g)
 
 @test
-def SYNCH_FLOODSET_COMPLETE_GRAPH_NO_FAIL(test=True):
+def SYNCH_FLOODSET_COMPLETE_GRAPH_NO_FAIL():
     g = Complete_Graph(10)
     C = FloodSet(g, params ={"f": 4, "v_0": 0, "V": set([0]), "fail_prob": 0, "failed_p": set(), "max_f": False, "is_ring": False})
     assertAllAlive(g)
@@ -377,21 +377,21 @@ def SYNCH_FLOODSET_COMPLETE_GRAPH_NO_FAIL(test=True):
     assertConsensusWithValueInInitialSet(g, C)
 
 @test
-def SYNCH_FLOODSET_UNI_RING_SOME_FAIL(test=True):
+def SYNCH_FLOODSET_UNI_RING_SOME_FAIL():
     r = Unidirectional_Ring(6)
     A = FloodSet(r, params ={"f": 4, "v_0": 0, "V": set([1,2,3,4,5,6]), "fail_prob": 0.5, "failed_p": set(), "max_f": False, "is_ring": True})
     assertOneFailsNoConsensusInRing(r)
     assertOneFailsAllFailInRing(r)
 
 @test
-def SYNCH_FLOODSET_UNI_RING_ALL_FAIL(test=True):
+def SYNCH_FLOODSET_UNI_RING_ALL_FAIL():
     r = Unidirectional_Ring(6)
     B = FloodSet(r, params ={"f": 4, "v_0": 0, "V": set([1,2,3,4,5,6]), "fail_prob": 1, "failed_p": set(), "max_f": False, "is_ring": True})
     assertAllFailed(r)
     assertNoConsensus(r)
 
 @test
-def SYNCH_FLOODSET_UNI_RING_NO_FAIL(test=True):
+def SYNCH_FLOODSET_UNI_RING_NO_FAIL():
     r = Unidirectional_Ring(6)
     C = FloodSet(r, params ={"f": 4, "v_0": 0, "V": set([0]), "fail_prob": 0, "failed_p": set(), "max_f": False, "is_ring": True})
     assertAllAlive(r)
@@ -399,21 +399,21 @@ def SYNCH_FLOODSET_UNI_RING_NO_FAIL(test=True):
     assertConsensusWithValueInInitialSet(r, C)
 
 @test
-def SYNCH_FLOODSET_BI_RING_ALL_FAIL(test=True):
+def SYNCH_FLOODSET_BI_RING_ALL_FAIL():
     r = Bidirectional_Ring(6)
     A = FloodSet(r, params ={"f": 4, "v_0": 0, "V": set([1,2,3,4,5,6]), "fail_prob": 1, "failed_p": set(), "max_f": False, "is_ring": True})
     assertAllFailed(r)
     assertNoConsensus(r)
 
 @test
-def SYNCH_FLOODSET_BI_RING_SOME_FAIL(test=True):
+def SYNCH_FLOODSET_BI_RING_SOME_FAIL():
     r = Bidirectional_Ring(6)
     B = FloodSet(r, params ={"f": 4, "v_0": 0, "V": set([1,2,3,4,5,6]), "fail_prob": 0.5, "failed_p": set(), "max_f": False, "is_ring": True})
     assertOneFailsNoConsensusInRing(r)
     assertOneFailsAllFailInRing(r)
 
 @test
-def SYNCH_FLOODSET_BI_RING_NO_FAIL(test=True):
+def SYNCH_FLOODSET_BI_RING_NO_FAIL():
     r = Bidirectional_Ring(6)
     C = FloodSet(r, params ={"f": 4, "v_0": 0, "V": set([0]), "fail_prob": 0, "failed_p": set(), "max_f": False, "is_ring": True})
     assertAllAlive(r)
