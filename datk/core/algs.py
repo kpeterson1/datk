@@ -1,4 +1,7 @@
 from distalgs import *
+from helpers import *
+import random
+from random import randrange
 
 def Colorizer(algorithm,network,vals,algorithm_type):
     """
@@ -832,3 +835,214 @@ class SynchBellmanFord(Synchronous_Algorithm):
         if updated_SP != SP:
             self.set(p, 'SP', updated_SP)
             self.set(p, 'send', True)
+
+# consensus algorithm; resistant to failure
+class FloodSet(Synchronous_Algorithm):
+    """
+    FloodSet is a simple algorithm for solving the agreement problem for stopping failures. In other words, it
+    is a fault-tolerant consensus algorithm.
+    Algorithm:
+    Given V, an input set, and v_0, a prespecified default value in the input set V, processes just propagate all the
+    values in V that they have ever seen and use a simple decision rule at the end. Each process maintains a variable W
+    containing a subset of V. Initially, process i's variable W contains only i's initial value. For each of f + 1 rounds,
+    each process broadcasts W, then adds all the elements of the received sets to W. After f + 1 rounds, process i applies
+    the following decision rule. If W is a singleton set, then decides on the unique element of W; otherwise, i decides on
+    the default value v0.
+    Requires:
+        - Every process, p, has p.state["decision"] that is initialized to "unknown." If the process, p is alive at the end of
+          the algorithm, then p.state["decision"] = v_0 or p.state["decision"]= v. If the process, p, has terminated before
+          the algorithm has successfully terminated, then p.state["decision"] = "failed."
+        - Every process, p, maintains a variable, W, containing a subset of the input set, V.
+
+    The Synchronous_Algorithm class is initialized to contain self.params, which is a dictionary containing the following key-value pairs:
+    | *** Key    :   Value ***
+    |______________________________________________________________________________________________________________________________________________
+    |* f         :   positive, non-zero integer value indicating total number of faults allowed by algorithm (i.e. its fault tolerance)           |
+    |* dec_rule  :   function by which processes decide upon a value, v, given a set, W, of values received as msgs                               |
+    |* v_0       :   a prespecified default decision value in the input set V.                                                                    |
+    |* V         :   initial set of possible decision values;                                                                                     |
+    |* fail_prob :   sets the probability a process p fails in any given round                                                                    |
+    |* max_f     :   boolean - determines whether or not more than the allowed number of failures have occurred since the beginning of            |
+    |                execution of the algorithm. If True, then the number of failures that have occurred so far is <= f, the allowed number of    |
+    |                failures. If False, then the number of failures that have occurred so far is < f. (The default value of max_f is False).     |
+    |* is_ring   :   boolean indicating if the network on which FloodSet will run is ring-shaped (e.g. Uni-Ring or Bi-Ring)
+    |_____________________________________________________________________________________________________________________________________________|
+    """
+
+    def add_failed(self, p):
+        """" Helper function used to add failed processes to the set, failed_p, which the algorithm maintains in order to
+        keep track of all processes that have failed since the beginning of execution of the algorithm.
+        """
+        failed_p = self.params["failed_p"]
+        # before adding failed process p, check that the total
+        # number of failures so far is less than the fault tolerance, f
+        if len(failed_p) < self.params["f"]:
+            return failed_p.add(p.UID)
+        else:
+            if not self.params["max_f"]:
+                self.params["max_f"] = True
+                self.print_failed()
+                return failed_p
+            else:
+                return failed_p
+
+    def get_failed(self):
+        """ Returns the set of processes that have failed since the beginning of execution of the algorithm.
+        """
+        return self.params["failed_p"]
+
+    def get_votes(self, p):
+        """
+        Returns W, the set of 'votes' a.k.a values, which process p has seen so far.
+        """
+        return self.get(p, "W")
+
+    def initialize_votes(self, p):
+        """ Creates a set whose size is equal to the number of processes in the network.
+        Can be used to create V, the input set of values from which processes are assigned their initial value.
+        """
+        V = set()
+        network_size = p.state['n']
+        for vote in xrange(network_size):
+            V.add(vote)
+        return V
+
+
+    def set_initial_vote(self, W):
+        """ For each process p in the network, each process p maintains a variable W containing a subset of V. This method initializes
+        each process i's variable W to contain some initial value, chosen randomly from V.
+        """
+        V = list(self.params["V"])
+        v_index = randrange(len(V)) # index of V
+        v = V[v_index] # corresponding value in V to assign as v
+        v_set = set([v])
+        return W.union(v_set)
+
+
+    def has_failed(self, failure_probability):
+        """
+        random_prob: a randomly generating floating-point number between 0.0 and 1.0; determined within the method below.
+        failure_probability: a double whose value is between 0.0 and 1.0. Given a randomly generated value, random_prob, the value of
+        'failure_probability' determines the upperbound of allowed values of random_prob for which a process is in the state 'not Failed.'
+        If 'failure' probability is 0, then the process p will be determined to be in the state 'Not Failed.'
+        If 'failure' probability is 1, then the process p will always be determined to be in the state 'Failed.'
+
+        Checks whether or not a process, p, has failed at a given point in time. The state of a process ('Failed' or 'Not Failed')
+        is determined probabilistically by generating a random floating point number (i.e. random.random()). If this
+        number is less than failure_probability, the process has not failed.
+        """
+        failure = False
+        # likelihood that a given process p will fail during current round
+        random_prob  = random.random()
+
+        if random_prob < failure_probability:
+            # process has not failed.
+            # occurs indefinitely when failure_probability is set to 1.
+            return not (failure)
+        else:
+            if random_prob == 1.0 and failure_probability == 1.0:
+                # handles the case when both values are set to 1.0, and we do not want to detrmined that
+                # the process is in the failed state.
+                return not (failure)
+            else:
+                # process has failed, return; don't continue with trans_i step
+                # if failure_proabability is 0, then (random_prob < failure_probability) is False,
+                # so the boolean 'failure,'  whose default is False, is returned
+                return failure
+
+
+    def print_failed(self):
+        """ Prints the number of processes that have failed at the termination of the algorithm, along with a list of their UIDS.
+        Also prints the total number of processes that have failed in each round. """
+
+        num_failed = len(self.params["failed_p"])
+        if not self.params["max_f"]:
+            if num_failed > 0:
+                self.params["max_f"] = True
+                text = str(num_failed) + " processes failed. Here are their uids: "+ str(list(self.params["failed_p"])) + "\n"
+            else:
+                self.params["max_f"] = True
+                text = str(num_failed) + " processes failed" + " in round " + str(self.r) + "\n"
+            print colored(text, "red")
+
+
+
+    def msgs_i(self, p):
+        # check if process p has failed during this round
+        if self.has_failed(self.params["fail_prob"]):
+            self.output(p, "decision", "failed")
+            # output round in which process failed
+            failed = colored(" failed in round ", "red")
+            print str(p) + failed + str(self.r) + "\n"
+            self.add_failed(p)
+            p.terminate(self)
+            return
+        else:
+            pass
+
+        # initialize W, the initial subset of values of V
+        if not self.has(p, "W"):
+            W = set()
+            W_new = self.set_initial_vote(W)
+            self.set(p, "W", W_new)
+
+
+        if not self.has(p, "decision"):
+            decision = set(["unknown"])
+            self.set(p, "decision", decision)
+
+        #if rounds < f then send W to all other processes
+        if self.r <= self.params["f"]:
+            if not self.has(p, "send"):
+                #intialize W to contain v_0
+                if self.params["v_0"] not in self.get(p, "W"):
+                    w = self.get_votes(p)
+                    w.add(self.params["v_0"])
+                self.set(p, "send",  Message(self, self.get(p, "W")))
+            p.send_msg(self.get(p, "send"))
+
+
+    def trans_i(self, p, msgs, verbose=False):
+        W = self.get(p, "W")
+        # check if process p has failed during this round
+        if self.has_failed(self.params["fail_prob"]):
+            self.output(p, "decision", "failed")
+            # output round in which process failed
+            failed = colored(" failed in round ", "red")
+            print str(p) + failed + str(self.r) + "\n"
+            self.add_failed(p)
+            p.terminate(self)
+            return
+        else:
+            pass
+
+        msgs = [m.content for m in msgs]
+        if verbose:
+            print p, "received", p.in_channel
+        # update W with values in W_j set
+        for W_j in msgs:
+            W.update(W_j)
+        self.set(p, "send", Message(self, W))
+
+        # r = f + 1
+        if self.r == self.params["f"] +1:
+            #If W is a singleton set, then i decides on the unique element of W;
+            if len(self.get(p, "W")) == 1:
+                # get singleton element of W
+                (v,) = self.get(p, "W")
+                # set then decision == v , where W = {v}
+                self.set(p, "decision", v)
+                self.output(p, "decision", v)
+
+                self.print_failed()
+                p.terminate(self)
+                return
+
+            #If W is NOT a singleton set,
+            else:
+            # then set decision == v_0, the default value
+                self.set(p, "decision", self.params["v_0"])
+                self.output(p, "decision", self.params["v_0"])
+                self.print_failed()
+                p.terminate(self)
+                return

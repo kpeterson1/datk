@@ -10,7 +10,7 @@ from scipy.linalg import eig
 import math
 from matplotlib import pyplot as plt
 
-from helpers import memoize
+from helpers import *
 
 class Message:
     """
@@ -449,8 +449,8 @@ class Algorithm:
                 self.print_algorithm_terminated()
 
     def print_algorithm_terminated(self):
-        print self.name+" Terminated"
-        msg_complexity = "Message Complexity: " + str(self.message_count)
+        print colored(self.name, ": Terminated", "blue")
+        msg_complexity = colored("Message Complexity: ", "blue") + colored(str(self.message_count), "cyan")
         print msg_complexity
         print "-"*len(msg_complexity)
 
@@ -459,21 +459,21 @@ class Algorithm:
 
     def set(self, process, state, value):
         process.state[self][state] = value
-    
+
     def increment(self, process, state, inc=1):
         process.state[self][state] += inc
-    
+
     def has(self, process, state):
         return state in process.state[self]
-    
+
     def get(self, process, state):
         if self.has(process, state):
             return process.state[self][state]
-    
+
     def delete(self, process, state):
         if self.has(process, state):
             del process.state[self][state]
-    
+
     def output(self, process, key, val):
         """
         Sets the publicly visible value of process.state[key] to val
@@ -524,12 +524,13 @@ class Synchronous_Algorithm(Algorithm):
                 self.trans_i(process, process.get_msgs(self))
     
     def print_algorithm_terminated(self):
-        print self.name+" Terminated"
-        msg_complexity = "Message Complexity: " + str(self.message_count)
+        print "\n" + colored(self.name + " Terminated", attrs=['bold'])
+        msg_complexity = colored("Message Complexity: ", 'blue') + colored(str(self.message_count), 'cyan')
         print msg_complexity
-        time_complexity = "Time Complexity: " + str(self.r)
+        time_complexity = colored("Time Complexity: ", 'blue') + colored(str(self.r), 'cyan')
         print time_complexity
-        print "-"*len(time_complexity)
+        print colored("-"*len(time_complexity), 'blue')
+        print "\n"
 
 
 class Do_Nothing(Synchronous_Algorithm):

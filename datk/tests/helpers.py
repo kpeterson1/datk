@@ -2,6 +2,8 @@
 Helper functions for tests in tests.py
 """
 from datk.core.distalgs import Process
+import sys
+from datk.core.helpers import *
 
 def assertLeaderElection(
     network,
@@ -58,3 +60,172 @@ def assertLubyMIS(network):
             assert not any([nbr.state['MIS'] for nbr in process.out_nbrs]), 'MIS not independent'
         if process.state['MIS'] == False:
             assert any([nbr.state['MIS'] for nbr in process.out_nbrs]), 'MIS not maximal'
+
+# helpers for consensus algorithms, e.g. FloodSet
+def assertConsensus(network):
+    """Asserts that every Process, p, that has not failed decides upon the same 'decision' value by the termination of the algorithm, 
+    and that the final value decided upon is not 'failed'"""
+    num_p_failed = 0
+    decision = 'no decision'
+    for p in network:
+        assert 'decision' in p.state, print_error("Floodset Failed. state['decision'] not found.\n")
+        if p.state['decision'] is "failed":
+            num_p_failed += 1
+        else:
+            if decision is 'no decision':
+                decision = p.state['decision']
+            else:
+                assert 'decision' in p.state, print_error("Consensus Failed. state['decision'] not found.\n")
+                assert p.state['decision'] == decision and decision != "failed", print_error("Consensus Failed. Agreement not reached among all processes.\n")
+
+    hasDecided = lambda p: "decision" in p.state and p.state["decision"] == decision
+    total_p = len([p for p in network])
+    assert sum([hasDecided(p) for p in network]) == (total_p - num_p_failed) , print_error("Consensus Failed. \n")
+
+def assertConsensusWithValueInInitialSet(network, algorithm):
+    """Asserts that every Process, p, that has not failed decides upon the same 'decision' value, and that the final
+     value decided upon exists in V, the initial set of possible decision values from which a process could choose as its 'decision'"""
+    num_p_failed = 0
+    decision = 'no decision'
+    initial_V = algorithm.params["V"] # returns a set of the initial input values
+    for p in network:
+        assert 'decision' in p.state, print_error("Floodset Failed. state['decision'] not found.\n")
+        if p.state['decision'] is "failed":
+            num_p_failed += 1
+        else:
+            if decision is 'no decision':
+                decision = p.state['decision']
+            else:
+                assert 'decision' in p.state, print_error("Consensus Failed. state['decision'] not found.\n")
+                assert decision in initial_V,  print_error("Process reached consensus on value: " + decision + " but this value is not in the initial set of input values, V: " + str(initial_V))
+                assert p.state['decision'] == decision, print_error("Consensus Failed. Agreement not reached among all processes.\n")
+
+    hasDecided = lambda p: "decision" in p.state and p.state["decision"] == decision
+    total_p = len([p for p in network])
+    assert sum([hasDecided(p) for p in network]) == (total_p - num_p_failed) , print_error("Consensus Failed. \n")
+    if decision is not 'no decision':
+        # need a way to set V in example network 
+        assert True, print_error("Consensus Failed. Final decision value not in initial set of possible decision values \n")
+        assert decision in initial_V,  print_error("Process reached consensus on value: " + decision + " but this value is not in the initial set of input values, V: " + str(initial_V))
+
+def assertNoConsensus(network):
+    """Asserts that no consensus is reached, meaning that every Process, p, that has not failed does not agree upon
+    the same, single value. No consensus will also be reached if every process fails.
+     """
+    num_p_failed = 0
+    decision = 'no decision'
+    for p in network:
+        assert 'decision' in p.state, print_error("state['decision'] not found.")
+        if p.state['decision'] is "failed":
+            num_p_failed += 1
+        else:
+            if decision is 'no decision':
+                decision = p.state['decision']
+            else:
+                assert 'decision' in p.state, print_error("state['decision'] not found.\n")
+                assert p.state['decision'] == decision and decision == "failed" , print_error("Consensus Succeeded.\n EXPECTED: not all processes reached same decision.\n ACTUAL: All processed agreed on some value.\n \
+                    However, this error may not be problematic, if running a test when only some processes should fail. Try increasing the value of the parameter 'failure_prob' so that more processes fail.\n")
+
+
+def assertConsensusOnDefaultValue(network):
+    """Asserts that every Process, p, that has not failed decides upon the same 'decision' value, and that the final
+     value decided upon is v_0, the specified default value.
+     """
+    # test case where all processes startwith initial values = v_0
+    # TODO : fill in test
+
+def assertConsensusOnInitialValue(network, algorithm):
+    """Asserts that every Process, p, that has not failed decides upon the same 'decision' value, and that the final
+     value decided upon is v_0, the specified default value. This test assumes that all processes start with the same value, v_0.
+     """
+    # test case where all processes start with initial values = v_0
+    v_0 = algorithm.params["v_0"]
+    V = algorithm.params["V"]
+    for p in network:
+        assert 'decision' in p.state, print_error("state['decision'] not found.\n")
+        assert v_0 in V, print_error("The initial value " + str(v_0) + "was not found in the initial set of input values, " + str(V))
+        assert p.state['decision'] == v_0, print_error("EXPECTED: process's decision = " + str(v_0) + ".\n ACTUAL: process's decision = " + str(p.state['decision']))
+
+
+def assertSomeFail(network, algorithm):
+    """Asserts that if one or more of the Processes, p, has failed, but the total number of failed processes is less than f, the total allowed number
+    of failures, then consensus is still reached. Alternatively, if the total number of failed processes exceeds f, then the algorithm fails and consensus is NOT reached.
+     """
+    num_p_failed = 0
+    decision = 'no decision'
+    for p in network:
+        assert 'decision' in p.state, print_error("state['decision'] not found.\n")
+        if p.state['decision'] is "failed":
+            num_p_failed += 1
+        else:
+            if decision is 'no decision':
+                decision = p.state['decision']
+            else:
+                assert 'decision' in p.state, print_error("state['decision'] not found.\n")
+                if algorithm.params["f"] >= num_p_failed >= 1:
+                    assert p.state['decision'] == decision and decision == "failed" , print_error("Consensus Succeeded.\n EXPECTED: not all processes reached same decision.\n ACTUAL: All processed agreed on some value.\n")
+                else:
+                    assert p.state['decision'] == decision and decision != "failed", print_error("Consensus Failed. Agreement not reached among all processes.\n")
+
+def assertOneFailsNoConsensusInRing(network):
+    """Given a Uni-Ring or Bi-Ring network, asserts that if one or more of the Processes, p, has failed during execution of the
+    algorithm, consensus is not reached.
+     """
+    num_p_failed = 0
+    total_p = len([p for p in network])
+    decision = 'no decision'
+    for p in network:
+        assert 'decision' in p.state, print_error("Floodset Failed. state['decision'] not found.")
+        if p.state['decision'] is "failed":
+            num_p_failed += 1
+        else:
+            if decision is 'no decision':
+                decision = p.state['decision']
+    if num_p_failed >= 1:
+        assert p.state['decision'] == decision and decision == "failed" , print_error("Consensus Succeeded.\n EXPECTED: some processes have the decision 'failed.'\n ACTUAL: All processes agreed on some value that is not 'failed'.\n")
+
+
+def assertOneFailsAllFailInRing(network):
+    """Given a Uni-Ring or Bi-Ring network, asserts that if one or more of the Processes, p, has failed during execution of the
+    algorithm, all processes have the decision state set to 'failed' by the termination of the algorithm, and the algorithm fails (i.e.
+    no consensus reached).
+     """
+    num_p_failed = 0
+    total_p = len([p for p in network])
+    decision = 'no decision'
+    for p in network:
+        assert 'decision' in p.state, print_error("Floodset Failed. state['decision'] not found.")
+        if p.state['decision'] is "failed":
+            num_p_failed += 1
+        else:
+            if decision is 'no decision':
+                decision = p.state['decision']
+    if num_p_failed >= 1:
+        assert num_p_failed == total_p , print_error("Floodset Failed. Not all processes failed as expected.\n EXPECTED: " + str(total_p) + "/" + str(total_p) + " failed.\n ACTUAL: "+ str(num_p_failed) + "/" + str(total_p) + " failed. \n")
+
+def assertAllFailed(network):
+    """Asserts that every Process, p, has failed by the termination of the algorithm
+     """
+    num_p_failed = 0
+    total_p = len([p for p in network])
+    for p in network:
+        assert 'decision' in p.state, print_error("Floodset Failed. state['decision'] not found.")
+        if p.state['decision'] is "failed":
+            num_p_failed += 1
+    assert 'decision' in p.state, print_error("Floodset Failed. state['decision'] not found.")
+    assert num_p_failed == total_p , print_error("Floodset Failed. Not all processes failed as expected.\n EXPECTED: " + str(total_p) + "/" + str(total_p) + " failed.\n ACTUAL: "+ str(num_p_failed) + "/" + str(total_p) + " failed. \n")
+
+def assertAllAlive(network):
+    """Asserts that every Process, p, remains alive and has NOT failed by the termination of the algorithm
+     """
+    num_p_failed = 0
+    total_p = len([p for p in network])
+    for p in network:
+        assert p.state['decision'] != "unknown", print_error("Floodset Failed. state['decision'] not found.")
+        if p.state['decision'] is "failed":
+            num_p_failed += 1
+    assert 'decision' in p.state, print_error("Floodset Failed. state['decision'] not found.")
+    assert num_p_failed != total_p , print_error("Floodset Failed. Not all processes survived as expected; some have failed.")
+    assert num_p_failed == 0, print_error("Floodset Failed. Not all processes survived as expected; some have failed.\n EXPECTED: " + str(total_p) + "/" + str(total_p) + " survived.\n ACTUAL: "+ str(total_p - num_p_failed) + "/" + str(total_p) + " survived. \n")
+
+

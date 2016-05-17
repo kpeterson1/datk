@@ -1,6 +1,8 @@
 from threading import Thread, Lock
 from time import sleep, time
 from distalgs import Process, Algorithm, Synchronous_Algorithm
+from helpers import *
+
 
 def print_with_underline(text):
     print text
@@ -41,7 +43,7 @@ class Tester:
                     f()
                 except Exception, e:
                     self._failed_tests.add(f.__name__)
-                    print_with_underline("TEST "+f.__name__+" FAILED.")
+                    print_error_with_underline("TEST "+f.__name__+" FAILED.")
                     raise e
                 finally:
                     self._num_tests+=1
@@ -54,16 +56,18 @@ class Tester:
                 else:
                     t = Thread(target = test_f)
                     t.daemon = True
-                    
+
                     start_time = time()
                     t.start()
                     t.join(timeout)
                     end_time = time()
                     if end_time - start_time >= timeout:
                         self._failed_tests.add(f.__name__)
-                        print_with_underline(f.__name__ + " TIMED OUT AFTER " + str(timeout) + "s")
+                        text = print_error_with_underline(f.__name__ + " TIMED OUT AFTER " + str(timeout) + "s")
+                        print text
                     else:
-                        print_with_underline(f.__name__ + " RAN IN " +str(end_time-start_time) + "s")
+                        text = print_time_with_double_underline(f.__name__ + " RAN IN " +str(end_time-start_time) + "s")
+                        print text
         if f is None:
             return test_decorator
         else:
@@ -72,8 +76,18 @@ class Tester:
 
     def summarize(self):
         """Called at the end of a test suite. Prints out summary of failed tests"""
-        
-        print self._num_tests, "tests ran with", len(self._failed_tests), "failures:", sorted(list(self._failed_tests))
+        if len(self._failed_tests) > 0:
+            print_error((self._num_tests, "tests ran with", len(self._failed_tests), "failures:", sorted(list(self._failed_tests))))
+        else:
+            if self._num_tests == 1:
+                num_tests = " test"
+            else:
+                num_tests = str(num_tests) + "s"
+            if len(self._failed_tests) > 0:
+                text = str(self._num_tests) + num_tests + " ran with " + str(len(self._failed_tests)) + " failures:" + sorted(list(self._failed_tests))
+            else:
+                text = str(self._num_tests) + num_tests + " ran with " + str(len(self._failed_tests)) + " failures."
+            print_okay(text)
 
         self._num_tests = 0
         self._failed_tests = set()
